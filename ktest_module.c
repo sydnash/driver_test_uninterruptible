@@ -79,11 +79,11 @@ ssize_t my_read(struct file *file, char __user *user_buffer, size_t size, loff_t
     size_t csize;
 
     flag = 0;
-    printk(KERN_INFO "my read called before wait event interruptible: %ld %lld flag: %p %d\n", size, *offset, &flag, flag);
-    wait_event_interruptible(wq, flag != 0);
-    //wait_event(wq, flag != 0);
+    printk(KERN_INFO "my read called: before wait event interruptible: %ld %lld flag: %p %d\n", size, *offset, &flag, flag);
+    //wait_event_interruptible(wq, flag != 0);
+    wait_event(wq, flag != 0);
 
-    printk(KERN_INFO "my read called: %ld %lld flag: %p %d\n", size, *offset, &flag, flag);
+    printk(KERN_INFO "my read called: wakeuped: %ld %lld flag: %p %d\n", size, *offset, &flag, flag);
     my_data = (struct my_device_data *) file->private_data;
     csize = min(strlen(test), size);
 

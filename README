@@ -1,0 +1,20 @@
+TASK_UNINTERRUPTIBLE
+	task block in uninterruptible state, which conn't be wake up by signal.
+
+	wait_event
+
+	make task wait in uninterruptible state, the `kill -s SIGUSR1 pid` will do nothing only for recode the signal.
+	and dispatch the signal after the task wakeup from the wait_event.
+TASK_INTERRUPTIBLE
+	task block in interruptible state, which can be wake up by signal
+
+	wait_event_interruptible
+
+	make task wait in interruptible state, so the process can be terminat by `kill -s SIGUSR1 pid` signal
+
+	the wait_event_interruptible will be wakeup by the signal, and the flag is zero.
+
+	```
+	[  161.193160] my read called: before wait event interruptible: 131072 13 flag: 00000000a5653654 0
+	[  181.584961] my read called: wakeuped: 131072 13 flag: 00000000a5653654 0
+	```
