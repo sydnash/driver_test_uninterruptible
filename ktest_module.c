@@ -135,7 +135,7 @@ static ssize_t my_write(struct file *file, const char __user *user_buffer, size_
 			return -EAGAIN;
 		}
 		if (wait_write(my_data)) {
-			pr_info("wait up by signal, return erestart sys.\n");
+			pr_info("wake up by signal, return erestart sys.\n");
 			return -ERESTARTSYS;
 		}
 		if (lock(my_data)) {
@@ -175,7 +175,7 @@ ssize_t my_read(struct file *file, char __user *user_buffer, size_t size, loff_t
             return -EAGAIN;
 		}
 		if (wait_read(my_data)) {
-			pr_warn("wait up by signal, return erestart sys.\n");
+			pr_warn("wake up by signal, return -ERESTARTSYS.\n");
 			return -ERESTARTSYS;
 		}
 		if (lock(my_data)) {
