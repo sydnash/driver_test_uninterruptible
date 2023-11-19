@@ -21,49 +21,6 @@ TASK_INTERRUPTIBLE
 
 restart syscall:
 
-```
-#include <unistd.h>
-#include <stdio.h>
-#include <signal.h>
-#include <string.h>
-#define	BUFFSIZE	4096
-
-void handle(int id)
-{
-	printf("handle signal: %d", id);
-}
-
-int
-main(void)
-{
-	int		n;
-	char	buf[BUFFSIZE];
-
-	struct sigaction action;
-	struct sigaction old_action;
-	memset(&action, sizeof(struct sigaction), 0);
-	action.sa_handler = handle;
-	action.sa_flags |= SA_RESTART;
-	if (sigaction(SIGUSR1, &action, &old_action)) {
-		perror("sigaction error: ");
-	}
-
-
-
-	while ((n = read(STDIN_FILENO, buf, BUFFSIZE)) > 0)
-		if (write(STDOUT_FILENO, buf, n) != n)
-			perror("write error");
-
-	if (n < 0)
-		perror("read error");
-
-	if (sigaction(SIGUSR1, &old_action, &action)) {
-		perror("sigaction error: ");
-	}
-	return 0;
-}
-```
-
 set SA_RESTART of sa_flags, call make a break system call be restarted while the signal catched.
 
 ```
@@ -80,3 +37,52 @@ kill -SIGUSR1 pid
 ```
 
 system call of read be called while receive SIGUSR1。
+
+# test
+
+## uninterruptible
+```
+make build
+main main
+sudo insmod ktest_hello.ko can_interruptible=0
+./main < /dev/ktest_hello0
+
+# after this, ctl-c will not work.
+# start another terminal and 
+
+echo 1 > /dev/ktest_hello0
+
+```
+
+## interruptible without restart syscall
+```
+make build
+main main
+sudo insmod ktest_hello.ko can_interruptible=1
+./main < /dev/ktest_hello0
+
+# after this, ctl-c or send signal, will exit
+
+kill -s SIGUSR1 35898 # this will see: read error: Interrupted system call
+
+```
+
+## interruptible with restart syscall
+
+````
+make build
+main main
+sudo insmod ktest_hello.ko can_interruptible=1
+./main 1 < /dev/ktest_hello0
+
+# send signal will not exit and dmesg will see driver read has been recalled.
+kill -s SIGUSR1 36170
+
+```
+
+```
+[62211.997935] wake up by signal, return -ERESTARTSYS.
+[62211.998543] pid: 36170, my read called: before wait event interruptible: 4096 0 flag: 00000000f5ec851a 0
+[62277.164885] wake up by signal, return -ERESTARTSYS.
+[62277.165282] pid: 36170, my read called: before wait event interruptible: 4096 0 flag: 00000000f5ec851a 0
+```

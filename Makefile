@@ -8,3 +8,6 @@ install: build
 	sudo insmod ktest_hello.ko
 uninstall:
 	sudo rmmod ktest_hello
+
+main: ./test/main.c
+	$(CC) -o main ./test/main.c

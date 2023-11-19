@@ -8,8 +8,13 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/types.h>
+#include <linux/mm.h>
 
 #define MY_MAX_MINORS 5
+
+static void *kmalloc_ptr;
+static char *kmalloc_area;
+const size_t NPAGES = 3;
 
 struct my_device_data {
 	struct cdev cdev;
@@ -32,12 +37,14 @@ static int my_open(struct inode *inode, struct file *file);
 static ssize_t my_read(struct file *file, char __user *user_buffer, size_t size, loff_t *offset);
 static ssize_t my_write(struct file *file, const char __user *user_buffer,size_t size, loff_t * offset);
 static long my_ioctl (struct file *file, unsigned int cmd, unsigned long arg);
+static int my_mmap(struct file *filp, struct vm_area_struct *vma);
 
 const struct file_operations my_fops = {
 	.owner = THIS_MODULE,
 	.open = my_open,
 	.read = my_read,
 	.write = my_write,
+	.mmap = my_mmap,
 	//.release = my_release,
 	.unlocked_ioctl = my_ioctl
 };
@@ -79,6 +86,25 @@ static __always_inline int __must_check wait_write(struct my_device_data *data)
 		return wait_event_interruptible(data->outq, data->has_write == 0);
 	}
 	wait_event(data->outq, data->has_write == 0);
+	return 0;
+}
+
+int my_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+	//struct my_device_data *my_data = (struct myk_device_data*) filp->private_data;
+	size_t len = vma->vm_end - vma->vm_start;
+	char *start = NULL;
+	int pfn, ret;
+	pr_info("my_mmap: start: %lx end: %lx, offset: %lx", vma->vm_start, vma->vm_end, vma->vm_pgoff);
+	if ((vma->vm_pgoff << PAGE_SHIFT) + len > (NPAGES << PAGE_SHIFT)) {
+		return -EOVERFLOW;
+	}
+	start = kmalloc_area + (vma->vm_pgoff << PAGE_SHIFT);
+	pfn = virt_to_phys((void*)start);
+	ret = remap_pfn_range(vma, vma->vm_start, pfn, len, vma->vm_page_prot);
+	if (ret < 0) {
+		return -EIO;
+	}
 	return 0;
 }
 
@@ -206,6 +232,12 @@ static __always_inline void init_my_device(struct my_device_data *data)
 	data->has_write = 0;
 }
 
+static int my_dev_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+    add_uevent_var(env, "DEVMODE=%#o", 0666);
+    return 0;
+}
+
 static int __init ktest_module_init(void)
 {
 	dev_t curr_dev;
@@ -214,6 +246,7 @@ static int __init ktest_module_init(void)
 	alloc_chrdev_region(&dev_num, 0, MY_MAX_MINORS, "ktest_hello");
 	/* Create a class : appears at /sys/class */
 	my_class = class_create(THIS_MODULE, "ktest_hello");
+	my_class->dev_uevent = my_dev_uevent;
 
 	for(int i = 0; i < MY_MAX_MINORS; i++) {
 		/* initialize devs[i] fields */
@@ -229,6 +262,19 @@ static int __init ktest_module_init(void)
 
 		cdev_add(&devs[i].cdev, curr_dev, 1);
 	}
+
+	kmalloc_ptr = kmalloc((NPAGES+2) << PAGE_SHIFT, GFP_KERNEL);
+	kmalloc_area = (char*)PAGE_ALIGN((unsigned long)kmalloc_ptr);
+
+	for  (size_t i = 0; i < NPAGES; ++i) {
+		char *a = (kmalloc_area) + (i << PAGE_SHIFT);
+		struct page* page = virt_to_page(a);
+		SetPageReserved(page);
+	}
+	kmalloc_area[1] = 0xaa;
+	kmalloc_area[2] = 0xbb;
+	kmalloc_area[3] = 0xcc;
+	kmalloc_area[4] = 0xdd;
 	return 0;
 }
 
@@ -244,6 +290,13 @@ static void __exit ktest_module_exit(void)
 	}
 	unregister_chrdev_region(dev_num, MY_MAX_MINORS);
 	class_destroy(my_class);
+
+	for  (size_t i = 0; i < NPAGES; ++i) {
+		char *a = (kmalloc_area) + (i << PAGE_SHIFT);
+		struct page* page = virt_to_page(a);
+		ClearPageReserved(page);
+	}
+	kfree(kmalloc_ptr);
 }
 
 module_init(ktest_module_init);
