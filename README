@@ -43,7 +43,7 @@ system call of read be called while receive SIGUSR1。
 ## uninterruptible
 ```
 make build
-main main
+make main
 sudo insmod ktest_hello.ko can_interruptible=0
 ./main < /dev/ktest_hello0
 
